@@ -29,15 +29,6 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getMaven = void 0;
 // Load tempDirectory before it gets wiped by tool-cache
@@ -60,33 +51,29 @@ if (!tempDirectory) {
     }
     tempDirectory = path.join(baseLocation, 'actions', 'temp');
 }
-function getMaven(version) {
-    return __awaiter(this, void 0, void 0, function* () {
-        let toolPath;
-        toolPath = tc.find('maven', version);
-        if (!toolPath) {
-            toolPath = yield downloadMaven(version);
-        }
-        toolPath = path.join(toolPath, 'bin');
-        core.addPath(toolPath);
-    });
+async function getMaven(version) {
+    let toolPath;
+    toolPath = tc.find('maven', version);
+    if (!toolPath) {
+        toolPath = await downloadMaven(version);
+    }
+    toolPath = path.join(toolPath, 'bin');
+    core.addPath(toolPath);
 }
 exports.getMaven = getMaven;
-function downloadMaven(version) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const toolDirectoryName = `apache-maven-${version}`;
-        const downloadUrl = `https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${version}/apache-maven-${version}-bin.tar.gz`;
-        console.log(`downloading ${downloadUrl}`);
-        try {
-            const downloadPath = yield tc.downloadTool(downloadUrl);
-            const extractedPath = yield tc.extractTar(downloadPath);
-            let toolRoot = path.join(extractedPath, toolDirectoryName);
-            return yield tc.cacheDir(toolRoot, 'maven', version);
-        }
-        catch (err) {
-            throw err;
-        }
-    });
+async function downloadMaven(version) {
+    const toolDirectoryName = `apache-maven-${version}`;
+    const downloadUrl = `https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${version}/apache-maven-${version}-bin.tar.gz`;
+    console.log(`downloading ${downloadUrl}`);
+    try {
+        const downloadPath = await tc.downloadTool(downloadUrl);
+        const extractedPath = await tc.extractTar(downloadPath);
+        let toolRoot = path.join(extractedPath, toolDirectoryName);
+        return await tc.cacheDir(toolRoot, 'maven', version);
+    }
+    catch (err) {
+        throw err;
+    }
 }
 
 
@@ -120,50 +107,57 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
+const fs = __importStar(__nccwpck_require__(9896));
 const installer = __importStar(__nccwpck_require__(8328));
 const axios_1 = __importStar(__nccwpck_require__(7269));
-function validateSubscription() {
-    var _a;
-    return __awaiter(this, void 0, void 0, function* () {
-        const API_URL = `https://agent.api.stepsecurity.io/v1/github/${process.env.GITHUB_REPOSITORY}/actions/subscription`;
-        try {
-            yield axios_1.default.get(API_URL, { timeout: 3000 });
+async function validateSubscription() {
+    const eventPath = process.env.GITHUB_EVENT_PATH;
+    let repoPrivate;
+    if (eventPath && fs.existsSync(eventPath)) {
+        const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
+        repoPrivate = eventData?.repository?.private;
+    }
+    const upstream = 'stCarolas/setup-maven';
+    const action = process.env.GITHUB_ACTION_REPOSITORY;
+    const docsUrl = 'https://docs.stepsecurity.io/actions/stepsecurity-maintained-actions';
+    core.info('');
+    core.info('\u001b[1;36mStepSecurity Maintained Action\u001b[0m');
+    core.info(`Secure drop-in replacement for ${upstream}`);
+    if (repoPrivate === false)
+        core.info('\u001b[32m\u2713 Free for public repositories\u001b[0m');
+    core.info(`\u001b[36mLearn more:\u001b[0m ${docsUrl}`);
+    core.info('');
+    if (repoPrivate === false)
+        return;
+    const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
+    const body = { action: action || '' };
+    if (serverUrl !== 'https://github.com')
+        body.ghes_server = serverUrl;
+    try {
+        await axios_1.default.post(`https://agent.api.stepsecurity.io/v1/github/${process.env.GITHUB_REPOSITORY}/actions/maintained-actions-subscription`, body, { timeout: 3000 });
+    }
+    catch (error) {
+        if ((0, axios_1.isAxiosError)(error) && error.response?.status === 403) {
+            core.error(`\u001b[1;31mThis action requires a StepSecurity subscription for private repositories.\u001b[0m`);
+            core.error(`\u001b[31mLearn how to enable a subscription: ${docsUrl}\u001b[0m`);
+            process.exit(1);
         }
-        catch (error) {
-            if ((0, axios_1.isAxiosError)(error) && ((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 403) {
-                core.error('Subscription is not valid. Reach out to support@stepsecurity.io');
-                process.exit(1);
-            }
-            else {
-                core.info('Timeout or API not reachable. Continuing to next step.');
-            }
-        }
-    });
+        core.info('Timeout or API not reachable. Continuing to next step.');
+    }
 }
-function run() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            yield validateSubscription();
-            let version = core.getInput('maven-version');
-            if (version) {
-                yield installer.getMaven(version);
-            }
+async function run() {
+    try {
+        await validateSubscription();
+        let version = core.getInput('maven-version');
+        if (version) {
+            await installer.getMaven(version);
         }
-        catch (error) {
-            core.setFailed(error.message);
-        }
-    });
+    }
+    catch (error) {
+        core.setFailed(error.message);
+    }
 }
 run();
 
